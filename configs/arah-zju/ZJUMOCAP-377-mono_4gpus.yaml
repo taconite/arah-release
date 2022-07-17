@@ -1,0 +1,60 @@
+method: metaavatar_render
+data:
+  dim: 3
+  dataset: zju_mocap
+  path: data/zju_mocap
+  use_aug: false
+  normalized_scale: true
+  train_split: ['CoreView_377']
+  val_split: ['CoreView_377']
+  test_split: ['CoreView_377']
+  train_views: ['1']
+  val_views: ['1']
+  test_views: ['1']
+  train_subsampling_rate: 1
+  train_start_frame: 0
+  train_end_frame: 500
+  val_subsampling_rate: 10
+  val_start_frame: 500
+  val_end_frame: 0
+  test_subsampling_rate: 10
+  test_start_frame: 500
+  test_end_frame: 0
+  num_fg_samples: 1024
+  num_bg_samples:  1024
+  off_surface_thr: 0.2
+  box_margin: 0.05
+  sample_reg_surface: true
+  erode_mask: false
+  high_res: true
+model:
+  encoder: null
+  skinning_decoder: deformer_mlp
+  decoder: hyper_bvp
+  encoder_kwargs: {}
+  decoder_kwargs: {'in_features': 3, 'num_hidden_layers': 5, 'hierarchical_pose': true, 'hyper_in_ch': 144, 'use_FiLM': true}
+  renderer_kwargs: {'mode': no_view_dir, 'd_in': 6, 'd_out': 3, 'd_hidden': 256, 'n_layers': 5, 'weight_norm': true, 'multires': 0, 'multires_view': 0, 'skips': [3], 'squeeze_out': true}
+  skinning_decoder_kwargs: {'d_in': 3, 'd_out': 25, 'd_hidden': 128, 'n_layers': 4, 'skip_in': [], 'cond_in': [], 'multires': 0, 'bias': 1.0, 'geometric_init': false, 'weight_norm': true}
+  geometry_net: out/meta-avatar/conv-unet-plane64x3_CAPE-SV_keep-aspect_stage2-inner-1e-6-outer-1e-6_1gpus/model_best.pt
+  skinning_net2: out/meta-avatar/conv-unet-plane64x3-shallow-hierarchical_CAPE_keep-aspect_stage0-meta-fwd_batch-size-4_1gpus/model_best.pt
+  geo_pose_encoder: latent
+  color_pose_encoder: latent
+  cano_view_dirs: false
+  near_surface_samples: 16
+  far_surface_samples: 16
+training:
+  gpus: [0, 1, 2, 3]
+  out_dir: out/arah-zju/ZJUMOCAP-377-mono_4gpus
+  batch_size: 1 # images per-GPU
+  validate_every_n_epochs: 20
+  checkpoint_every_n_epochs: 5
+  max_epochs: 500
+  stage: meta-hyper
+  lr: 1.0e-6
+  pose_net_factor: 100
+  mask_weight: 0.0
+  skinning_weight: 10.0
+  inside_weight: 10.0
+  train_skinning_net: true
+  pose_input_noise: true
+  view_input_noise: true

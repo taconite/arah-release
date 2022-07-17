@@ -1,0 +1,35 @@
+name: arah
+channels:
+  - pytorch3d
+  - iopath
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - cudatoolkit=11.3.1=h2bc3f7f_2
+  - igl=2.2.1=py39h86c447d_1
+  - numpy=1.21.2=py39h20f2e39_0
+  - numpy-base=1.21.2=py39h79a1101_0
+  - pip=21.2.4=py39h06a4308_0
+  - python=3.9.7=h12debd9_1
+  - pytorch=1.10.0=py3.9_cuda11.3_cudnn8.2.0_0
+  - pytorch-lightning=1.5.10=pyhd8ed1ab_0
+  - pytorch3d=0.6.1=py39_cu113_pyt1100
+  - pyyaml=5.4.1=py39h3811e60_0
+  - torchmetrics=0.8.1=pyhd8ed1ab_0
+  - torchvision=0.11.1=py39_cu113
+  - pip:
+    - cython==0.29.23
+    - gdown==4.5.1
+    - imageio==2.13.5
+    - imageio-ffmpeg==0.4.7
+    - kornia==0.5.10
+    - lpips==0.1.4
+    - matplotlib==3.4.2
+    - opencv-python==4.5.5.62
+    - pandas==1.2.4
+    - plyfile==0.7.4
+    - scikit-image==0.18.1
+    - scikit-learn==0.24.2
+    - trimesh==3.9.20
+    - wandb==0.12.15
