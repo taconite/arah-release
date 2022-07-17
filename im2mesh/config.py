@@ -57,7 +57,7 @@ def update_recursive(dict1, dict2):
 
 
 # Models
-def get_model(cfg, dataset=None, val_size=None, mode='train'):
+def get_model(cfg, dataset=None, val_size=None, mode='train', low_vram=False, checkpoint_path=None):
     ''' Returns the pytorch_lightning.LightningModule instance.
 
     Args:
@@ -65,7 +65,7 @@ def get_model(cfg, dataset=None, val_size=None, mode='train'):
         dataset (dataset): dataset object
     '''
     method = cfg['method']
-    model = method_dict[method].config.get_model(cfg, dataset=dataset, mode=mode)
+    model = method_dict[method].config.get_model(cfg, dataset=dataset, mode=mode, low_vram=low_vram, checkpoint_path=checkpoint_path)
 
     lightning_model = method_dict[method].lightning_model.LightningModel(
         model=model,

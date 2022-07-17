@@ -152,6 +152,7 @@ def get_model(cfg, **kwargs):
     '''
 
     init_weights = True
+    low_vram = kwargs.get('low_vram', False)
 
     mode = kwargs.get('mode', None)
     if mode is not None and mode in ['val', 'test']:
@@ -163,7 +164,8 @@ def get_model(cfg, **kwargs):
     deviation_decoder = get_deviation_decoder(cfg)
 
     # Get initial camera extrinsics, if we want to optimize them
-    train_cameras = cfg['model']['train_cameras']
+    model_kwargs = {}
+    train_cameras = cfg['model']['train_cameras'] and mode in ['train', 'val']
     if train_cameras:
         dataset = kwargs['dataset']
         cam_names = dataset.cam_names
@@ -172,10 +174,10 @@ def get_model(cfg, **kwargs):
         cam_trans = [np.array(cameras[cam_name]['T'], dtype=np.float32).ravel() for cam_name in cam_names]
         cam_rots = np.stack(cam_rots, axis=0)
         cam_trans = np.stack(cam_trans, axis=0)
-        kwargs.update({'cam_rots': cam_rots, 'cam_trans': cam_trans})
+        model_kwargs.update({'cam_rots': cam_rots, 'cam_trans': cam_trans})
 
     # Get initial SMPL poses/shapes, if we want to optimize them
-    train_smpl = cfg['model']['train_smpl']
+    train_smpl = cfg['model']['train_smpl'] and mode in ['train', 'val']
     if train_smpl:
         dataset = kwargs['dataset']
         root_orient = []
@@ -216,18 +218,23 @@ def get_model(cfg, **kwargs):
             trans.append(model_dict['trans'].astype(np.float32))
             frames.append(single_data['frame_idx'])
 
-        kwargs.update({'root_orient': root_orient,
-                       'pose_body': pose_body,
-                       'pose_hand': pose_hand,
-                       'trans': trans,
-                       'betas': betas,
-                       'gender': gender,
-                       'frames': frames})
+        model_kwargs.update({'root_orient': root_orient,
+                             'pose_body': pose_body,
+                             'pose_hand': pose_hand,
+                             'trans': trans,
+                             'betas': betas,
+                             'gender': gender,
+                             'frames': frames})
+
+
+    if mode == 'test':
+        ckpt_path = kwargs.get('checkpoint_path', None)
+        ckpt = torch.load(ckpt_path, map_location='cpu')
 
     # Get initial geometry/appearance latent codes, if applicable
     train_latent_code = cfg['model']['color_pose_encoder'] in ['hybrid', 'latent']
     train_geo_latent_code = cfg['model']['geo_pose_encoder'] in ['latent']
-    if train_latent_code or train_geo_latent_code:
+    if (train_latent_code or train_geo_latent_code) and mode in ['train', 'val']:
         dataset = kwargs['dataset']
         cam_idx = dataset.data[0]['cam_idx']
         n_data_points = 0
@@ -241,8 +248,13 @@ def get_model(cfg, **kwargs):
             n_data_points += 1
             frames.append(single_data['frame_idx'])
 
-        kwargs.update({'n_data_points': n_data_points,
-                       'frames': frames})
+        model_kwargs.update({'n_data_points': n_data_points,
+                             'frames': frames})
+    elif train_latent_code or train_geo_latent_code:
+        # Special case for testing: load latent codes from checkpoint, and get the dimension of embeddings
+        n_data_points = ckpt['state_dict']['model.latent.weight'].size(0)
+        model_kwargs.update({'n_data_points': n_data_points,
+                             'frames': []})
 
     cano_view_dirs = cfg['model']['cano_view_dirs']
     near_surface_samples = cfg['model']['near_surface_samples']
@@ -272,7 +284,19 @@ def get_model(cfg, **kwargs):
         pose_input_noise=pose_input_noise,
         view_input_noise=view_input_noise,
         nv_noise_type=nv_noise_type,
-        **kwargs
+        low_vram=low_vram,
+        **model_kwargs
     )
+
+    if mode == 'test':
+        # Special case for testing: Pytorch Lightning does not support loading checkpoints
+        # with strict=False, so we have to manually do it
+        old_state_dict = ckpt['state_dict']
+        state_dict = OrderedDict()
+        for k, v in old_state_dict.items():
+            if k.startswith('model'):
+                state_dict[k[6:]] = v
+
+        model.load_state_dict(state_dict, strict=False)
 
     return model

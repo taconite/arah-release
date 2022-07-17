@@ -35,6 +35,7 @@ class MetaAvatarRender(nn.Module):
             pose_input_noise=True,
             view_input_noise=True,
             nv_noise_type='rotation',
+            low_vram=False,
             n_steps=64,
             **kwargs):
         ''' Initialization of the MetaAvatarRender class.
@@ -57,6 +58,7 @@ class MetaAvatarRender(nn.Module):
             pose_input_noise (bool): whether to add noise to pose inputs during training
             view_input_noise (bool): whether to add noise to viewing directions during training
             nv_noise_type (str): which type of augmentation noise to use for view and normals
+            low_vram (bool): if set to True, use less VRAM for inference
             n_steps (int): how many points to sample for rays that do not intersect with surface
         '''
         super().__init__()
@@ -70,8 +72,8 @@ class MetaAvatarRender(nn.Module):
         self.view_input_noise = view_input_noise
         self.nv_noise_type = nv_noise_type
 
-        ray_tracer = BodyRayTracing(root_finding_threshold=1e-5, n_steps=n_steps, near_surface_vol_samples=near_surface_samples, far_surface_vol_samples=far_surface_samples, sample_bg_pts=0)
-        self.idhr_network = IDHRNetwork(deviation_decoder, color_decoder, skinning_model, ray_tracer, cano_view_dirs=cano_view_dirs, train_skinning_net=train_skinning_net, render_last_pt=render_last_pt)
+        ray_tracer = BodyRayTracing(root_finding_threshold=1e-5, n_steps=n_steps, near_surface_vol_samples=near_surface_samples, far_surface_vol_samples=far_surface_samples, sample_bg_pts=0, low_vram=low_vram)
+        self.idhr_network = IDHRNetwork(deviation_decoder, color_decoder, skinning_model, ray_tracer, cano_view_dirs=cano_view_dirs, train_skinning_net=train_skinning_net, render_last_pt=render_last_pt, low_vram=low_vram)
 
         self.train_cameras = train_cameras
         if train_cameras:

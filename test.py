@@ -29,6 +29,7 @@ parser.add_argument('--test-views', type=str, default='1', help='Which views to 
 parser.add_argument('--subsampling-rate', type=int, default=1, help='Sampling rate for poses. Larger rate means less poses to render.')
 parser.add_argument('--start-frame', type=int, default=0, help='Frame index to start rendering.')
 parser.add_argument('--end-frame', type=int, default=0, help='Frame index to stop rendering.')
+parser.add_argument('--low-vram', action='store_true', help='Use less VRAM for inference.')
 parser.add_argument('--multi-gpu', action='store_true', help='Test on multiple (4) GPUs.')
 parser.add_argument('--num-workers', type=int, default=4,
                     help='Number of workers to use for val/test loaders.')
@@ -42,8 +43,6 @@ if  __name__ == '__main__':
     out_dir = cfg['training']['out_dir']
     batch_size = cfg['training']['batch_size']
 
-    # Dataloaders
-    train_dataset = config.get_dataset('train', cfg)
     # Overwrite configuration
     cfg['data']['test_views'] = args.test_views.split(',')
     cfg['data']['dataset'] = 'zju_mocap_odp'
@@ -58,14 +57,14 @@ if  __name__ == '__main__':
         val_dataset, batch_size=1, num_workers=args.num_workers, shuffle=False
     )
 
-    # Create PyTorch Lightning model
-    model = config.get_model(cfg, dataset=train_dataset, val_size=len(val_loader), mode='test')
-
-    # Create PyTorch Lightning trainer
     checkpoint_path = os.path.join(out_dir, 'checkpoints/last.ckpt')
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError('No checkpoint is found!')
 
+    # Create PyTorch Lightning model
+    model = config.get_model(cfg, val_size=len(val_loader), mode='test', low_vram=args.low_vram, checkpoint_path=checkpoint_path)
+
+    # Create PyTorch Lightning trainer
     if args.multi_gpu:
         trainer = pl.Trainer(default_root_dir=out_dir,
                              accelerator='gpu',
@@ -78,4 +77,4 @@ if  __name__ == '__main__':
                              devices=[0],
                              num_sanity_val_steps=0)
 
-    trainer.test(model=model, dataloaders=val_loader, ckpt_path=checkpoint_path, verbose=True)
+    trainer.test(model=model, dataloaders=val_loader, verbose=True)

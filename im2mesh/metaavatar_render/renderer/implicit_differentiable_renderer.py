@@ -20,7 +20,7 @@ from pytorch3d.structures import Meshes, Pointclouds
 class IDHRNetwork(nn.Module):
     ''' Implicit Differentiable Human Renderer (IDHR) class.
     '''
-    def __init__(self, deviation_network, rendering_network, skinning_model, ray_tracer, cano_view_dirs=True, train_skinning_net=False, render_last_pt=False):
+    def __init__(self, deviation_network, rendering_network, skinning_model, ray_tracer, cano_view_dirs=True, train_skinning_net=False, render_last_pt=False, low_vram=False):
         ''' Initialization of the IDHRNetwork class.
 
         Args:
@@ -42,6 +42,7 @@ class IDHRNetwork(nn.Module):
         self.cano_view_dirs = cano_view_dirs
         self.train_skinning_net = train_skinning_net
         self.render_last_pt = render_last_pt
+        self.low_vram = low_vram
 
     def forward(self, input):
         ''' Forward pass of the model.
@@ -188,11 +189,18 @@ class IDHRNetwork(nn.Module):
             sampler_converge_mask = sampler_converge_mask[vol_mask]
             ray_dirs = ray_dirs[vol_mask]
 
-            p_split = torch.split(sampled_pts, 20480, dim=0)
-            d_split = torch.split(sampled_dists, 20480, dim=0)
-            t_split = torch.split(sampled_transforms, 20480, dim=0)
-            m_split = torch.split(sampler_converge_mask, 20480, dim=0)
-            r_split = torch.split(ray_dirs, 20480, dim=0)
+            if self.low_vram:
+                p_split = torch.split(sampled_pts, 2048, dim=0)
+                d_split = torch.split(sampled_dists, 2048, dim=0)
+                t_split = torch.split(sampled_transforms, 2048, dim=0)
+                m_split = torch.split(sampler_converge_mask, 2048, dim=0)
+                r_split = torch.split(ray_dirs, 2048, dim=0)
+            else:
+                p_split = torch.split(sampled_pts, 20480, dim=0)
+                d_split = torch.split(sampled_dists, 20480, dim=0)
+                t_split = torch.split(sampled_transforms, 20480, dim=0)
+                m_split = torch.split(sampler_converge_mask, 20480, dim=0)
+                r_split = torch.split(ray_dirs, 20480, dim=0)
 
             rgb_values_vol = []
             ws_vol = []
@@ -214,7 +222,7 @@ class IDHRNetwork(nn.Module):
                                                         coord_max[:1],
                                                         center[:1],
                                                         ray_augm=ray_augm,
-                                                        point_batch_size=1000000)
+                                                        point_batch_size=100000 if self.low_vram else 1000000)
 
                 rgb_values_vol.append(rgb_i)
                 ws_vol.append(w_i)

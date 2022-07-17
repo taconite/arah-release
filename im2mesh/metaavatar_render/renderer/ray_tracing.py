@@ -26,6 +26,7 @@ class BodyRayTracing(nn.Module):
             far_surface_vol_samples=16,
             surface_vol_range=0.05,
             sample_bg_pts=0,
+            low_vram=False,
     ):
         ''' Initialization of the ray-tracer class.
 
@@ -49,6 +50,7 @@ class BodyRayTracing(nn.Module):
         self.far_surface_vol_samples = far_surface_vol_samples
 
         self.sample_bg_pts = sample_bg_pts
+        self.low_vram = low_vram
 
     def forward(self,
                 # networks
@@ -423,6 +425,13 @@ class BodyRayTracing(nn.Module):
         T_fwd_0 = T_fwd_0.unsqueeze(2)  # (batch_size, n_pts, 1, 3)
 
         # Search the canonical correspondence and return forward bone transforms
+        if not eval_mode:
+            eval_point_batch_size = 100000
+        elif self.low_vram:
+            eval_point_batch_size = 100000
+        else:
+            eval_point_batch_size = 1000000
+
         x_hat_opt, T_fwd_opt, converge_mask, error_opt = \
                 search_canonical_corr(x_bar,
                                       x_hat_0,
@@ -436,7 +445,7 @@ class BodyRayTracing(nn.Module):
                                       coord_max,
                                       center,
                                       eval_mode=eval_mode,
-                                      eval_point_batch_size=1000000 if eval_mode else 100000)
+                                      eval_point_batch_size=eval_point_batch_size)
 
         x_hat_opt_norm = normalize_canonical_points(x_hat_opt.reshape(batch_size, -1, 3), coord_min, coord_max, center)
         sdf_opt = eval_sdf(x_hat_opt_norm, sdf_network).reshape(batch_size, n_pts, -1)

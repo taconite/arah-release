@@ -72,28 +72,28 @@ The extracted SMPL parameters will be saved into `./body_models/misc/`.
 1. Run `bash download_demo_data.sh` to download and extract 1) pretrained models and 2) the preprocessed AIST++ sequence.
 2. Run the pre-trained model on AIST++ poses via
     ```
-    python test.py --num-workers 4 configs/ZJUMOCAP-377-mono_4gpus.yaml
+    python test.py --num-workers 4 configs/arah-zju/ZJUMOCAP-377-mono_4gpus.yaml
     ```
     The script will compose a result .mp4 video in `out/arah-zju/ZJUMOCAP-377-mono_4gpus/vis`. There are a total of 258 frames, so it will take some time to render all the frames. If you want to check the result quickly run:
     ```
-    python test.py --num-workers 4 --end-frame 10 configs/ZJUMOCAP-377-mono_4gpus.yaml
+    python test.py --num-workers 4 --end-frame 10 configs/arah-zju/ZJUMOCAP-377-mono_4gpus.yaml
     ```
     to render only the first 10 frames, or
     ```
-    python test.py --num-workers 4 --subsampling-rate 25 configs/ZJUMOCAP-377-mono_4gpus.yaml
+    python test.py --num-workers 4 --subsampling-rate 25 configs/arah-zju/ZJUMOCAP-377-mono_4gpus.yaml
     ```
-    to render every 25th frame. Inference requires ~20GB VRAM, if you don't have so much memory, add `--low-vram` option. This should run with ~10GB VRAM at the cost of longer inference time. 
+    to render every 25th frame. Inference requires ~20GB VRAM, if you don't have so much memory, add `--low-vram` option. This should run with ~12GB VRAM at the cost of longer inference time. 
 
 ## Dataset preparation
 Due to license issues, we cannot publicly distribute our preprocessed ZJU-MoCap and H36M data. You have to get the raw data from their respective sources and use our preprocessing script to generate data that is suitable for our training/validation scripts. Please follow the steps in [DATASET.md](DATASET.md).
 
 ## Download pre-trained skinning and SDF networks
-We provide pre-trained [models](https://drive.google.com/drive/folders/1ZlIvwdfHdDsdGW-6YmeDF8znvbxRgiYK?usp=sharing) on the CAPE dataset as prerequisites, including 1) meta learned skinning network on the CAPE dataset, 2) MetaAvatar SDF model. After downloading them, please put them in respective folders under `./out/meta-avatar`.
+We provide pre-trained [models](https://drive.google.com/drive/folders/1nraph3_QeCeKU4reFd_OgJA696-dLjYh?usp=sharing) on the CAPE dataset as prerequisites, including 1) meta learned skinning network on the CAPE dataset, 2) MetaAvatar SDF model. After downloading them, please put them in respective folders under `./out/meta-avatar`.
 
 ## Training
 To train new networks from scratch, run
 ```
-python train.py --num-workers 8 ${path_to_config}
+python train.py --num-workers 4 ${path_to_config}
 ```
 Where ${path_to_config} is the relative path to the yaml config file, e.g. config/arah-zju/ZJUMOCAP-313_4gpus.yaml
 
@@ -119,6 +119,9 @@ To run the trained model on preprocessed poses, run
 ```
 python test.py --num-workers 4 --pose-dir ${pose_dir} --test-views ${view} configs/arah/${config}
 ```
+where `${pose_dir}` denotes the directory under `data/odp/CoreView_${sequence_name}/` that contains target (out-of-distribution) poses. `${view}` indicates the testing views from which to render the model.
+
+Currently, the code only supports animating ZJU-MoCap models for out-of-distribution poses.
 
 ## License
 We employ [MIT License](LICENSE.md) for the ARAH code, which covers
