@@ -42,7 +42,7 @@ model:
   near_surface_samples: 16
   far_surface_samples: 16
 training:
-  gpus: [0]
+  gpus: [0, 1, 2, 3]
   out_dir: out/arah-h36m/H36M_S9_4gpus
   batch_size: 1 # images per-GPU
   validate_every_n_epochs: 20
