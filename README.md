@@ -1,5 +1,5 @@
 # ARAH: Animatable Volume Rendering of Articulated Human SDFs
-## [Paper]() | [Project Page](https://neuralbodies.github.io/arah/)
+## [Paper](https://drive.google.com/file/d/10yCrdOadwKNiDQBni23_W03ZwVafkfCJ/view?usp=sharing) | [Project Page](https://neuralbodies.github.io/arah/)
 
 <img src="assets/mono.gif" width="800"/> 
 
