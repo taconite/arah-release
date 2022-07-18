@@ -25,10 +25,29 @@ ln -s ${OUTPUT_DIR} data/zju_mocap
 ```
 
 ## H36M
+Our H36M models are trained with the preprocessed version of H36M data from [Animatable NeRF](https://github.com/zju3dv/animatable_nerf). Please first email the authors of Animatable NeRF to get a copy of their preprocessed version of H36M data.
+
+After you get the data, extract the dataset to an arbitrary directory, denoted as ${H36M_ROOT}. It should have the following structure: 
+```
+${H36M_ROOT}
+ ├-- S1
+ ├-- S2
+ |   ...
+ └-- S11
+```
+
+To preprocess one sequence (e.g. S9), run the following
+```
+export PYTHONPATH=${PWD}    # only need to run this line once
+python preprocess_datasets/preprocess_H36M.py --data-dir ${H36M_ROOT} --out-dir ${OUTPUT_DIR} --seqname S9
+```
+where ${OUTPUT_DIR} is the directory where you want to save the preprocessed data. After this, create a symbolic link under `./data` directory by:
+```
+ln -s ${OUTPUT_DIR} data/h36m
+```
+
+## People Snapshot
 Coming soon!
 
-## AIST++
-Coming soon!
-
-## AMASS-MPI-Limits
+## AIST++ & AMASS-MPI-Limits
 Coming soon!
