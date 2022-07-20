@@ -47,7 +47,7 @@ training:
   batch_size: 1 # images per-GPU
   validate_every_n_epochs: 20
   checkpoint_every_n_epochs: 5
-  max_epochs: 500
+  max_epochs: 250
   stage: meta-hyper
   lr: 1.0e-6
   pose_net_factor: 100
