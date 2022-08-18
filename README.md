@@ -49,7 +49,7 @@ python setup.py build_ext --inplace
 ```
 
 ### SMPL Setup
-Download [SMPL v1.0](https://smpl.is.tue.mpg.de/) (for male and female models) and [SMPLify](https://smplify.is.tue.mpg.de/) (for the neutral model), remove the chumpy objects inside the .pkl models using [this code](https://github.com/vchoutas/smplx/tree/master/tools), and rename the files and copy them to `./body_models/smpl/`, eventually, the `./body_models` folder should have the following structure:
+Download `SMPL v1.0 for Python 2.7` from [SMPL website](https://smpl.is.tue.mpg.de/) (for male and female models), and `SMPLIFY_CODE_V2.ZIP` from [SMPLify website](https://smplify.is.tue.mpg.de/) (for the neutral model). After downloading, inside `SMPL_python_v.1.0.0.zip`, male and female models are `smpl/models/basicmodel_m_lbs_10_207_0_v1.0.0.pkl` and `smpl/models/basicModel_f_lbs_10_207_0_v1.0.0.pkl`, respectively. Inside `mpips_smplify_public_v2.zip`, the neutral model is `smplify_public/code/models/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl`. Remove the chumpy objects in these .pkl models using [this code](https://github.com/vchoutas/smplx/tree/master/tools) under a Python 2 environment (you can create such an environment with conda). Finally, rename the newly generated .pkl files and copy them to subdirectories under `./body_models/smpl/`. Eventually, the `./body_models` folder should have the following structure:
 ```
 body_models
  └-- smpl
