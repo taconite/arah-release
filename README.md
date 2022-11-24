@@ -140,4 +140,5 @@ Our SDF network is based on [SIREN](https://github.com/vsitzmann/siren). Our mes
 Modules not covered by our license are:
 1) Modified code from [EasyMocap](https://github.com/zju3dv/EasyMocap) to preprocess ZJU-MoCap/H36M datasets (`./preprocess_datasets/easymocap`);
 2) Modified code from [SMPL-X](https://github.com/nghorbani/human_body_prior) (`./human_body_prior`);
+
 for these parts, please consult their respective licenses and cite the respective papers.
