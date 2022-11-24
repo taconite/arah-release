@@ -286,12 +286,12 @@ class IDHRNetwork(nn.Module):
 
         device = points.device
 
-        valid_indices = torch.nonzero(converge_mask)
-
         lengths = converge_mask.sum(-1)
-        dst_indices = torch.cat([torch.arange(length.item()) for length in lengths], dim=0)
-        scatter_mask = torch.zeros(n_pts, n_samples, device=device, dtype=bool)
-        scatter_mask[valid_indices[:, 0], dst_indices] = 1
+        pv = torch.arange(n_pts).to(device)
+        scatter_mask= torch.zeros(n_pts, n_samples, device=device, dtype=bool)
+        scatter_mask[pv, lengths - 1] = 1
+        scatter_mask = scatter_mask +  torch.sum(scatter_mask, dim=1, keepdims=True) - torch.cumsum(scatter_mask, dim=1)
+        scatter_mask = scatter_mask.bool()
 
         valid_points = points[converge_mask]
         valid_view_dirs = view_dirs.view(n_pts, 1, 3).repeat(1, n_samples, 1)[converge_mask]
@@ -354,6 +354,13 @@ class IDHRNetwork(nn.Module):
                     # print ('# of invalid points: {}/{}'.format(invalid_mask.sum().item(), invalid_mask.numel()))
                     vi[invalid_mask] = vi_orig[invalid_mask]
 
+            if not self.training:
+                # Make sure no backward graph is stored at test time
+                normal = normal.detach()
+                feature_vectors = feature_vectors.detach()
+                sdf = sdf.detach()
+                pi = pi.detach()
+
             sdf = sdf / 2.0 * 1.1 * (coord_max.squeeze() - coord_min.squeeze())
             valid_sdf.append(sdf.squeeze(0))
             valid_rgb.append(self.rendering_network(pi.squeeze(0), normal.squeeze(0), vi, feature_vectors, pose_cond))
@@ -382,7 +389,7 @@ class IDHRNetwork(nn.Module):
             pv = torch.arange(n_pts).to(device)
             dists[pv, (lengths - 1)] = 1. / self.ray_tracer.n_steps
 
-        alpha = 1.0 -  torch.exp(-density*dists)
+        alpha = 1.0 - torch.exp(-density*dists)
 
         weights = alpha * \
                 torch.cumprod(torch.cat([torch.ones(n_pts, 1, dtype=torch.float32, device=device), 1. - alpha + 1e-7], dim=-1), dim=-1)[:, :-1]

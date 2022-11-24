@@ -246,7 +246,7 @@ class BodyRayTracing(nn.Module):
         # For non-divergent (during testing, to save computation) or all (during training) rays,
         # run root-finding to find SDF iso-surface points and their depth on camera rays
         curr_start_points = unnormalize_canonical_points(curr_start_points, coord_min, coord_max, center)
-        curr_start_points_opt, sdf_opt, acc_start_dis_opt, curr_start_transforms_opt, converge_mask_opt = \
+        curr_start_points_opt, acc_start_dis_opt, curr_start_transforms_opt, converge_mask_opt = \
                 search_iso_surface_depth(cam_locs,
                                          body_ray_directions,
                                          ~diverge_mask if eval else torch.ones_like(diverge_mask),
@@ -447,10 +447,7 @@ class BodyRayTracing(nn.Module):
                                       eval_mode=eval_mode,
                                       eval_point_batch_size=eval_point_batch_size)
 
-        x_hat_opt_norm = normalize_canonical_points(x_hat_opt.reshape(batch_size, -1, 3), coord_min, coord_max, center)
-        sdf_opt = eval_sdf(x_hat_opt_norm, sdf_network).reshape(batch_size, n_pts, -1)
-        sdf_opt[~converge_mask] = 1e11
-        converge_inds = sdf_opt.argmin(-1)  # If we use multiple initializations, then take the point that converges and has minimal SDF
+        converge_inds = torch.zeros(batch_size, n_pts, device=device, dtype=torch.int64)
 
         bv, pv = torch.meshgrid([torch.arange(batch_size).to(device), torch.arange(n_pts).to(device)], indexing='ij')
 

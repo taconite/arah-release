@@ -113,7 +113,7 @@ def query_weights(x_hat, loc, sc_factor, coord_min, coord_max, center, skinning_
     return w_ret
 
 
-def eval_sdf(points, sdf_model, point_batch_size=100000):
+def eval_sdf(points, sdf_model, eval=False, point_batch_size=100000):
     if len(points.shape) == 3:
         batch_size, n_pts, _ = points.size()
     else:
@@ -123,7 +123,12 @@ def eval_sdf(points, sdf_model, point_batch_size=100000):
     p_split = torch.split(points.reshape(1, -1, 3), point_batch_size, dim=1)
     sdf_vals = []
     for pi in p_split:
-        sdf_vals.append(sdf_model(pi))
+        if eval:
+            sdf_val = sdf_model(pi).detach()
+        else:
+            sdf_val = sdf_model(pi)
+
+        sdf_vals.append(sdf_val)
 
     return torch.cat(sdf_vals, dim=1).reshape(batch_size, n_pts, 1)
 
@@ -355,7 +360,6 @@ def search_iso_surface_depth(cam_pos, cam_rays, valid_mask, x_hat_0, Zdepth_0, T
     """
     # reshape to B x (N*I) x 3 for other functions
     batch_size, n_pts, n_dim = x_hat_0.size()
-    device = x_hat_0.device
     n_init = 1
     x_hat_0 = x_hat_0.reshape(batch_size, n_pts * n_init, n_dim)
     Zdepth_0 = Zdepth_0.reshape(batch_size, n_pts * n_init, 1)
@@ -366,12 +370,11 @@ def search_iso_surface_depth(cam_pos, cam_rays, valid_mask, x_hat_0, Zdepth_0, T
 
     if valid_mask.sum() == 0:
         x_hat_opt = x_hat_0.clone()
-        sdf_opt = 1e11 * torch.ones(batch_size, n_pts, device=device, dtype=torch.float32)    # 1e11 to ensure min() or abs().min() won't select non-convergent rays
         Zdepth_opt = Zdepth_0.view(batch_size, n_pts).clone()
         T_fwd_opt = T_fwd_0.clone()
         converge_mask_opt = valid_mask.clone()
 
-        return x_hat_opt, sdf_opt, Zdepth_opt, T_fwd_opt, converge_mask_opt
+        return x_hat_opt, Zdepth_opt, T_fwd_opt, converge_mask_opt
 
     valid_indices = torch.nonzero(valid_mask)
 
@@ -394,7 +397,7 @@ def search_iso_surface_depth(cam_pos, cam_rays, valid_mask, x_hat_0, Zdepth_0, T
         with torch.enable_grad():
             x_hat_0_ = valid_x_hat_0.clone().detach().requires_grad_(True)
             x_hat_0_norm = normalize_canonical_points(x_hat_0_, coord_min, coord_max, center)
-            pred_sdf = eval_sdf(x_hat_0_norm, sdf_model)
+            pred_sdf = eval_sdf(x_hat_0_norm, sdf_model, eval=False)
             pred_sdf = pred_sdf / 2.0 * 1.1 * (coord_max - coord_min)   # convert from normalized SDF space to SMPL canonical space
             grad_sdf = diff_operators.gradient_no_diff(pred_sdf, x_hat_0_).unsqueeze(-2)
 
@@ -429,7 +432,7 @@ def search_iso_surface_depth(cam_pos, cam_rays, valid_mask, x_hat_0, Zdepth_0, T
         # Compute SDF
         x_hat_opt_norm = normalize_canonical_points(x_hat_opt, coord_min, coord_max, center)
         mask_sdf = mask.reshape(batch_size, -1)
-        pred_sdf = eval_sdf(x_hat_opt_norm[mask_sdf], sdf_model)
+        pred_sdf = eval_sdf(x_hat_opt_norm[mask_sdf], sdf_model, eval=True)
         error_sdf = torch.zeros_like(Zdepth_opt)
         error_sdf.masked_scatter_(mask_sdf.unsqueeze(-1), pred_sdf)   # error measure for isosurface search
         error_sdf = error_sdf / 2.0 * 1.1 * (coord_max - coord_min)   # convert from normalized SDF space to canonical space
@@ -454,7 +457,6 @@ def search_iso_surface_depth(cam_pos, cam_rays, valid_mask, x_hat_0, Zdepth_0, T
     valid_converge_mask = result["valid_ids"].reshape(batch_size, n_valid_pts)
 
     x_hat_opt = x_hat_0.clone()
-    sdf_opt = 1e11 * torch.ones(batch_size, n_pts, device=device, dtype=torch.float32)    # 1e11 to ensure min() or abs().min() won't select non-convergent rays
     Zdepth_opt = Zdepth_0.view(batch_size, n_pts).clone()
     T_fwd_opt = T_fwd_0.clone()
     converge_mask_opt = valid_mask.clone()
@@ -465,13 +467,7 @@ def search_iso_surface_depth(cam_pos, cam_rays, valid_mask, x_hat_0, Zdepth_0, T
     # Scatter results into result tensors
     x_hat_opt.masked_scatter_(valid_mask.view(batch_size, n_pts, 1), valid_x_hat_opt[valid_indices[:, 0], dst_indices])
 
-    valid_x_hat_opt_norm = normalize_canonical_points(valid_x_hat_opt, coord_min, coord_max, center)[valid_indices[:, 0], dst_indices]
-    valid_sdf_opt = eval_sdf(valid_x_hat_opt_norm, sdf_model)
-
-    sdf_opt.masked_scatter_(valid_mask, valid_sdf_opt)
-    sdf_opt = sdf_opt / 2.0 * 1.1 * (coord_max.squeeze(-1) - coord_min.squeeze(-1))
-
     Zdepth_opt.masked_scatter_(valid_mask, valid_Zdepth_opt[valid_indices[:, 0], dst_indices])
     T_fwd_opt.masked_scatter_(valid_mask.view(batch_size, n_pts, 1, 1), valid_T_fwd_opt[valid_indices[:, 0], dst_indices])
 
-    return x_hat_opt, sdf_opt, Zdepth_opt, T_fwd_opt, converge_mask_opt
+    return x_hat_opt, Zdepth_opt, T_fwd_opt, converge_mask_opt
