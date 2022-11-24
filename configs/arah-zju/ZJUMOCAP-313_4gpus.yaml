@@ -14,9 +14,9 @@ data:
   train_subsampling_rate: 1
   train_start_frame: 0
   train_end_frame: 60
-  val_subsampling_rate: 100000
+  val_subsampling_rate: 100000  # for quick validation during training
   val_start_frame: 0
-  val_end_frame: 0
+  val_end_frame: 60
   test_subsampling_rate: 30
   test_start_frame: 60
   test_end_frame: 1061
