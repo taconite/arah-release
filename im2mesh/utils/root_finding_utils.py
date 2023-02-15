@@ -124,13 +124,24 @@ def eval_sdf(points, sdf_model, eval=False, point_batch_size=100000):
     sdf_vals = []
     for pi in p_split:
         if eval:
-            sdf_val = sdf_model(pi).detach()
+            # There is some weird bug from either PyTorch and PyTorch-Lightning,
+            # in which memory usage still grows very fast even with gradient disabled
+            # when evaluating MLPs with batches of points.
+            # Detaching the computation result and convert it to CPU tensors somehow
+            # prevents this weird bug
+            with torch.no_grad():
+                pi = pi.detach()
+                sdf_val = sdf_model(pi).detach().cpu()
+                sdf_vals.append(sdf_val)
+                del sdf_val
         else:
             sdf_val = sdf_model(pi)
+            sdf_vals.append(sdf_val)
 
-        sdf_vals.append(sdf_val)
-
-    return torch.cat(sdf_vals, dim=1).reshape(batch_size, n_pts, 1)
+    if eval:
+        return torch.cat(sdf_vals, dim=1).reshape(batch_size, n_pts, 1).to(points.device)
+    else:
+        return torch.cat(sdf_vals, dim=1).reshape(batch_size, n_pts, 1)
 
 
 def forward_skinning(x_hat, loc, sc_factor, coord_min, coord_max, center, skinning_model, vol_feat, bone_transforms, mask=None, return_w=False, point_batch_size=100000):

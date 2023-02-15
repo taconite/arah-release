@@ -207,8 +207,6 @@ class MetaAvatarRender(nn.Module):
 
                 from im2mesh.utils.root_finding_utils import (
                     forward_skinning,
-                    unnormalize_canonical_points,
-                    normalize_canonical_points
                 )
                 points_hat = torch.tensor(verts, dtype=torch.float32, device=device).unsqueeze(0)
                 points_hat = unnormalize_canonical_points(points_hat, coord_min, coord_max, center)
@@ -226,9 +224,6 @@ class MetaAvatarRender(nn.Module):
 
 
                 points_bar = points_lbs + inputs['trans']
-                verts_posed = points_bar.squeeze(0).detach().cpu().numpy()
-                # import trimesh
-                # posed_mesh = trimesh.Trimesh(vertices=verts_posed, faces=faces)
 
                 from pytorch3d.utils import cameras_from_opencv_projection
                 from pytorch3d.structures import Meshes

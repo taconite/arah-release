@@ -525,7 +525,7 @@ class BodyRayTracing(nn.Module):
         # Scatter data back to its original shape
         if len(dists.shape) == 2:
             if return_sdf:
-                valid_sdf = eval_sdf(valid_points, sdf_network)
+                valid_sdf = eval_sdf(valid_points, sdf_network, eval=True)
                 sdf = 1e11 * torch.ones(batch_size, n_pts, dtype=torch.float32, device=device)
                 sdf.masked_scatter_(valid_mask, valid_sdf)
                 sdf = sdf / 2.0 * 1.1 * (coord_max.squeeze(-1) - coord_min.squeeze(-1))
@@ -544,7 +544,7 @@ class BodyRayTracing(nn.Module):
                 return points, T_fwd, converge_mask
         else:
             if return_sdf:
-                valid_sdf = eval_sdf(valid_points, sdf_network)
+                valid_sdf = eval_sdf(valid_points, sdf_network, eval=True)
                 sdf = 1e11 * torch.ones(batch_size, n_pts, n_samples, dtype=torch.float32, device=device)
                 sdf.masked_scatter_(valid_mask, valid_sdf)
                 sdf = sdf / 2.0 * 1.1 * (coord_max - coord_min)
