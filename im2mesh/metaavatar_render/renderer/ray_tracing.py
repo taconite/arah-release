@@ -1,18 +1,14 @@
 import torch
-import time
 import pytorch3d
 import torch.nn as nn
-import numpy as np
 from collections import OrderedDict
-from im2mesh.metaavatar_render.renderer import rend_util
 
 from im2mesh.utils.root_finding_utils import (
     normalize_canonical_points, unnormalize_canonical_points,
-    search_canonical_corr, search_iso_surface_depth, init_x_hat,
+    search_canonical_corr, search_iso_surface_depth,
     eval_sdf
 )
 
-from pytorch3d.structures import Meshes, Pointclouds
 
 class BodyRayTracing(nn.Module):
     ''' Ray-tracer for articulated human body SDF.
@@ -72,7 +68,7 @@ class BodyRayTracing(nn.Module):
                 coord_min,
                 coord_max,
                 center,
-                eval=False
+                eval_mode=False
                 ):
         ''' Forward pass of the ray-tracer.
 
@@ -94,7 +90,7 @@ class BodyRayTracing(nn.Module):
             coord_min (torch.Tensor of batch_size x 1 x 3): lower bounds for bounding boxes of the canonical SMPL meshes
             coord_max (torch.Tensor of batch_size x 1 x 3): upper bounds for bounding boxes of the canonical SMPL meshes
             center (torch.Tensor of batch_size x 1 x 3): centroids of the canonical SMPL meshes
-            eval (bool): use evaluation mode (no random perturbation for ray samples)
+            eval_mode (bool): use evaluation mode (no random perturbation for ray samples)
         '''
 
         batch_size, num_pixels, _ = ray_directions.shape
@@ -129,10 +125,11 @@ class BodyRayTracing(nn.Module):
                                 trans[:1],
                                 coord_min[:1],
                                 coord_max[:1],
-                                center[:1]) # Note we assume all batches come from different views of the same temporal frame,
-                                            # so SMPL-related parameters are the same across batches. Otherwise it is hard to
-                                            # call the SDF network consistently since the SDF network is generated from a
-                                            # hypernetwork which takes body poses as inputs
+                                center[:1],
+                                eval_mode=eval_mode)    # Note we assume all batches come from different views of the same temporal frame,
+                                                        # so SMPL-related parameters are the same across batches. Otherwise it is hard to
+                                                        # call the SDF network consistently since the SDF network is generated from a
+                                                        # hypernetwork which takes body poses as inputs
 
         # Sample for volume rendering: sample near_surface_vol_samples points around surface points;
         # sample far_surface_vol_samples points outside surface range;
@@ -163,7 +160,7 @@ class BodyRayTracing(nn.Module):
                                      coord_min[:1],
                                      coord_max[:1],
                                      center[:1],
-                                     eval
+                                     eval_mode
                                     )
 
         return curr_start_points, \
@@ -174,7 +171,7 @@ class BodyRayTracing(nn.Module):
                sampler_transforms, \
                sampler_converge_mask
 
-    def sphere_tracing(self, batch_size, n_pts, sdf_network, skinning_model, cam_locs, ray_directions, body_bounds_intersections, loc, sc_factor, smpl_verts, smpl_verts_cano, skinning_weights, vol_feat, bone_transforms, trans, coord_min, coord_max, center, clamp_dist=0.1):
+    def sphere_tracing(self, batch_size, n_pts, sdf_network, skinning_model, cam_locs, ray_directions, body_bounds_intersections, loc, sc_factor, smpl_verts, smpl_verts_cano, skinning_weights, vol_feat, bone_transforms, trans, coord_min, coord_max, center, clamp_dist=0.1, eval_mode=False):
         ''' Run sphere tracing algorithm for max iterations from both sides of unit sphere intersection '''
         device = cam_locs.device
 
@@ -249,7 +246,7 @@ class BodyRayTracing(nn.Module):
         curr_start_points_opt, acc_start_dis_opt, curr_start_transforms_opt, converge_mask_opt = \
                 search_iso_surface_depth(cam_locs,
                                          body_ray_directions,
-                                         ~diverge_mask if eval else torch.ones_like(diverge_mask),
+                                         ~diverge_mask if eval_mode else torch.ones_like(diverge_mask),
                                          curr_start_points,
                                          acc_start_dis,
                                          curr_start_transforms,
@@ -313,13 +310,13 @@ class BodyRayTracing(nn.Module):
 
         return z_vals
 
-    def ray_sampler(self, sdf_network, skinning_model, cam_locs, body_mask, ray_directions, sampler_min_max, bounds_min_max, sampler_mask, loc, sc_factor, smpl_verts, smpl_verts_cano, skinning_weights, vol_feat, bone_transforms, trans, coord_min, coord_max, center, eval):
+    def ray_sampler(self, sdf_network, skinning_model, cam_locs, body_mask, ray_directions, sampler_min_max, bounds_min_max, sampler_mask, loc, sc_factor, smpl_verts, smpl_verts_cano, skinning_weights, vol_feat, bone_transforms, trans, coord_min, coord_max, center, eval_mode=False):
         ''' Sample on rays in given ranges '''
         # Sample n_samples points on non-convergent rays
         device = sampler_min_max.device
         z_vals = torch.linspace(0.0, 1.0, self.n_steps, device=device, dtype=torch.float32).view(1, 1, -1)
         z_vals = sampler_min_max[..., :1] + (sampler_min_max[..., 1:] - sampler_min_max[..., :1]) * z_vals # (batch_size, n_pts, n_samples)
-        if not eval:
+        if not eval_mode:
             z_vals = self.perturb_z_vals(z_vals)
 
         batch_size, n_pts, n_samples = z_vals.size()
@@ -333,7 +330,7 @@ class BodyRayTracing(nn.Module):
             z_vals_surface = torch.linspace(0.0, 1.0, self.near_surface_vol_samples+1, device=device, dtype=torch.float32).view(1, 1, -1)
             surface_depth = sampler_min_max[..., :1]
             z_vals_surface = surface_depth - self.surface_vol_range + self.surface_vol_range * 2 * z_vals_surface # (batch_size, n_pts, self.near_surface_vol_samples+1)
-            if not eval:
+            if not eval_mode:
                 z_vals_surface = self.perturb_z_vals(z_vals_surface, fix_idx=self.near_surface_vol_samples // 2)
 
             z_vals[body_indices[:, 0], body_indices[:, 1], :self.near_surface_vol_samples+1] = z_vals_surface[body_indices[:, 0], body_indices[:, 1]]
@@ -343,7 +340,7 @@ class BodyRayTracing(nn.Module):
                 z_vals_far = torch.linspace(0.0, 1.0, self.far_surface_vol_samples, device=device, dtype=torch.float32).view(1, 1, -1)
                 z_vals_far = bounds_min_max[..., :1] + torch.maximum(surface_depth - self.surface_vol_range - bounds_min_max[..., :1],
                                                                      torch.Tensor([1e-5]).float().to(device)) * z_vals_far # (batch_size, n_pts, self.far_surface_vol_samples)
-                if not eval:
+                if not eval_mode:
                     z_vals_far = self.perturb_z_vals(z_vals_far)
 
                 z_vals[body_indices[:, 0], body_indices[:, 1], self.near_surface_vol_samples+1:self.near_surface_vol_samples+1+self.far_surface_vol_samples] = z_vals_far[body_indices[:, 0], body_indices[:, 1]]
@@ -372,10 +369,10 @@ class BodyRayTracing(nn.Module):
                                                   center,
                                                   use_opt=True,
                                                   return_sdf=False,
-                                                  eval_mode=eval)
+                                                  eval_mode=eval_mode)
 
         # Sample points for rendering background, if applicable
-        if self.sample_bg_pts > 0 and not eval:
+        if self.sample_bg_pts > 0 and not eval_mode:
             z_vals_outside = torch.linspace(1e-3, 1.0 - 1.0 / (self.sample_bg_pts + 1.0), self.sample_bg_pts, device=device, dtype=torch.float32).view(1, 1, -1)
             z_vals_outside = bounds_min_max[..., 1:] / torch.flip(z_vals_outside, dims=[-1]) # + 1.0 / self.n_steps
             z_vals = (z_vals, z_vals_outside)
@@ -525,7 +522,7 @@ class BodyRayTracing(nn.Module):
         # Scatter data back to its original shape
         if len(dists.shape) == 2:
             if return_sdf:
-                valid_sdf = eval_sdf(valid_points, sdf_network, eval=True)
+                valid_sdf = eval_sdf(valid_points, sdf_network, eval_mode=True)
                 sdf = 1e11 * torch.ones(batch_size, n_pts, dtype=torch.float32, device=device)
                 sdf.masked_scatter_(valid_mask, valid_sdf)
                 sdf = sdf / 2.0 * 1.1 * (coord_max.squeeze(-1) - coord_min.squeeze(-1))
@@ -544,7 +541,7 @@ class BodyRayTracing(nn.Module):
                 return points, T_fwd, converge_mask
         else:
             if return_sdf:
-                valid_sdf = eval_sdf(valid_points, sdf_network, eval=True)
+                valid_sdf = eval_sdf(valid_points, sdf_network, eval_mode=True)
                 sdf = 1e11 * torch.ones(batch_size, n_pts, n_samples, dtype=torch.float32, device=device)
                 sdf.masked_scatter_(valid_mask, valid_sdf)
                 sdf = sdf / 2.0 * 1.1 * (coord_max - coord_min)

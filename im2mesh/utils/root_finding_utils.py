@@ -113,7 +113,7 @@ def query_weights(x_hat, loc, sc_factor, coord_min, coord_max, center, skinning_
     return w_ret
 
 
-def eval_sdf(points, sdf_model, eval=False, point_batch_size=100000):
+def eval_sdf(points, sdf_model, eval_mode=False, point_batch_size=100000):
     if len(points.shape) == 3:
         batch_size, n_pts, _ = points.size()
     else:
@@ -123,7 +123,7 @@ def eval_sdf(points, sdf_model, eval=False, point_batch_size=100000):
     p_split = torch.split(points.reshape(1, -1, 3), point_batch_size, dim=1)
     sdf_vals = []
     for pi in p_split:
-        if eval:
+        if eval_mode:
             # There is some weird bug from either PyTorch and PyTorch-Lightning,
             # in which memory usage still grows very fast even with gradient disabled
             # when evaluating MLPs with batches of points.
@@ -138,7 +138,7 @@ def eval_sdf(points, sdf_model, eval=False, point_batch_size=100000):
             sdf_val = sdf_model(pi)
             sdf_vals.append(sdf_val)
 
-    if eval:
+    if eval_mode:
         return torch.cat(sdf_vals, dim=1).reshape(batch_size, n_pts, 1).to(points.device)
     else:
         return torch.cat(sdf_vals, dim=1).reshape(batch_size, n_pts, 1)
@@ -408,7 +408,7 @@ def search_iso_surface_depth(cam_pos, cam_rays, valid_mask, x_hat_0, Zdepth_0, T
         with torch.enable_grad():
             x_hat_0_ = valid_x_hat_0.clone().detach().requires_grad_(True)
             x_hat_0_norm = normalize_canonical_points(x_hat_0_, coord_min, coord_max, center)
-            pred_sdf = eval_sdf(x_hat_0_norm, sdf_model, eval=False)
+            pred_sdf = eval_sdf(x_hat_0_norm, sdf_model, eval_mode=False)
             pred_sdf = pred_sdf / 2.0 * 1.1 * (coord_max - coord_min)   # convert from normalized SDF space to SMPL canonical space
             grad_sdf = diff_operators.gradient_no_diff(pred_sdf, x_hat_0_).unsqueeze(-2)
 
@@ -443,7 +443,7 @@ def search_iso_surface_depth(cam_pos, cam_rays, valid_mask, x_hat_0, Zdepth_0, T
         # Compute SDF
         x_hat_opt_norm = normalize_canonical_points(x_hat_opt, coord_min, coord_max, center)
         mask_sdf = mask.reshape(batch_size, -1)
-        pred_sdf = eval_sdf(x_hat_opt_norm[mask_sdf], sdf_model, eval=True)
+        pred_sdf = eval_sdf(x_hat_opt_norm[mask_sdf], sdf_model, eval_mode=True)
         error_sdf = torch.zeros_like(Zdepth_opt)
         error_sdf.masked_scatter_(mask_sdf.unsqueeze(-1), pred_sdf)   # error measure for isosurface search
         error_sdf = error_sdf / 2.0 * 1.1 * (coord_max - coord_min)   # convert from normalized SDF space to canonical space

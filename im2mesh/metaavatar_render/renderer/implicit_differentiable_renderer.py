@@ -1,21 +1,16 @@
 import torch
-import time
-import pytorch3d
 import torch.nn as nn
 import numpy as np
 
 import torch.nn.functional as F
 
-from im2mesh.metaavatar_render.renderer import rend_util
 from im2mesh.utils.diff_operators import gradient, jacobian
 
 from im2mesh.utils.root_finding_utils import (
     forward_skinning, query_weights,
     unnormalize_canonical_points,
-    normalize_canonical_points
 )
 
-from pytorch3d.structures import Meshes, Pointclouds
 
 class IDHRNetwork(nn.Module):
     ''' Implicit Differentiable Human Renderer (IDHR) class.
@@ -53,7 +48,7 @@ class IDHRNetwork(nn.Module):
 
         # Parse model input
         ## camera related inputs
-        intrinsics = input["intrinsics"]
+        # intrinsics = input["intrinsics"]
         ray_dirs = input["ray_dirs"]
         cam_loc = input["cam_loc"]
         pose = input["pose"]
@@ -107,11 +102,11 @@ class IDHRNetwork(nn.Module):
                                       coord_min=coord_min,
                                       coord_max=coord_max,
                                       center=center,
-                                      eval=not self.training,
+                                      eval_mode=not self.training,
                                      )
 
             if isinstance(sampled_dists, tuple):
-                sampled_bg_dists = sampled_dists[1]
+                # sampled_bg_dists = sampled_dists[1]
                 sampled_dists = sampled_dists[0]
 
         sdf_network.train()
