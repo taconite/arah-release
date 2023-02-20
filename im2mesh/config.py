@@ -249,6 +249,7 @@ def get_dataset(mode, cfg, view_split=None, subsampling_rate=None, start_frame=N
             subjects=split,
             pose_dir=pose_dir,
             mode=mode,
+            orig_img_size=(1024, 1024),
             img_size=(512, 512),
             num_fg_samples=num_fg_samples,
             num_bg_samples=num_bg_samples,

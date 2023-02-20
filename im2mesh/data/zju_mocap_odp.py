@@ -1,21 +1,16 @@
 import os
-import math
 import glob
 import cv2
 import numpy as np
 import json
 # import logging
-import trimesh
 import numbers
-
-import igl
 
 from torch.utils import data
 from scipy.spatial.transform import Rotation
 
-from im2mesh.utils.libmesh import check_mesh_contains
 from im2mesh.utils.utils import get_bound_2d_mask, get_near_far, get_02v_bone_transforms
-from .imutils import crop_new
+
 
 class ZJUMOCAPODPDataset(data.Dataset):
     ''' ZJU MoCap dataset class for out-of-distribution poses.
@@ -25,6 +20,7 @@ class ZJUMOCAPODPDataset(data.Dataset):
                  subjects=['CoreView_313'],
                  pose_dir='MPI-Limits_03009_op8_poses',
                  mode='test',
+                 orig_img_size=(1024, 1024),
                  img_size=(512, 512),
                  num_fg_samples=1024,
                  num_bg_samples=1024,
@@ -40,6 +36,7 @@ class ZJUMOCAPODPDataset(data.Dataset):
             subjects (list of strs): which subjects to use
             pose_dir (str): name of the motion sequence to use
             mode (str): mode of the dataset. Can be either 'train', 'val' or 'test'
+            orig_img_size (int or tuple of ints): original image on which the model was trained
             img_size (int or tuple of ints): target image size we want to sample frome
             num_fg_samples (int): number of points to sample from foreground
             num_bg_samples (int): number of points to sample from background
@@ -64,6 +61,11 @@ class ZJUMOCAPODPDataset(data.Dataset):
             self.img_size = (int(img_size), int(img_size))
         else:
             self.img_size = img_size
+
+        if isinstance(orig_img_size, numbers.Number):
+            self.orig_img_size = (int(orig_img_size), int(orig_img_size))
+        else:
+            self.orig_img_size = orig_img_size
 
         self.rot45p = Rotation.from_euler('z', 45, degrees=True).as_matrix()
         self.rot45n = Rotation.from_euler('z', -45, degrees=True).as_matrix()
@@ -106,8 +108,6 @@ class ZJUMOCAPODPDataset(data.Dataset):
                 frames = frames[start_frame::sampling_rate]
 
             for cam_idx, cam_name in enumerate(cam_names):
-                cam_dir = os.path.join(subject_dir, cam_name)
-
                 for d_idx, (f_idx, model_file) in enumerate(zip(frames, model_files)):
                     self.data.append(
                             {'subject': subject,
@@ -208,30 +208,34 @@ class ZJUMOCAPODPDataset(data.Dataset):
         gender = self.data[idx]['gender']
         data = {}
 
-        # No image augmentation is used; just feed default parameters to the image cropping function
-        flip = False            # flipping
-        pn = np.ones(3)  # per channel pixel-noise
-        rot = 0            # rotation
-        sc = 1            # scaling
-
         K = np.array(self.cameras[cam_name]['K'], dtype=np.float32)
-        dist = np.array(self.cameras[cam_name]['D'], dtype=np.float32).ravel()
         R = np.array(self.cameras[cam_name]['R'], np.float32)
         cam_trans = np.array(self.cameras[cam_name]['T'], np.float32).ravel()
 
         cam_loc = self.get_camera_location(R, cam_trans)
 
-        model_dict = np.load(data_path)
+        # Dummy placeholders for image and mask
+        img_crop = np.zeros((self.img_size[1], self.img_size[0], 3), dtype=np.float32)
+        mask_crop = np.zeros((self.img_size[1], self.img_size[0]), dtype=bool)
 
-        # TODO: center_img and scale_img should be changable according image size
-        center_img = np.array([512.0, 512.0], dtype=np.float32)
-        scale_img = 1024.0 / 200
-        scale_img *= sc
+        side = max(self.orig_img_size)
 
-        center_cam = K[:2, -1].reshape(-1).astype(np.float32)
+        # Update camera parameters
+        principal_point = K[:2, -1].reshape(-1).astype(np.float32)
         focal_length = np.array([K[0, 0], K[1, 1]], dtype=np.float32)
 
+        focal_length = focal_length / side  * max(self.img_size)
+        principal_point = principal_point / side * max(self.img_size)
+
+        K[:2, -1] = principal_point
+        K[0, 0] = focal_length[0]
+        K[1, 1] = focal_length[1]
+
+        K_inv = np.linalg.inv(K)    # for mapping rays from camera space to world space
+
         # 3D models and points
+        model_dict = np.load(data_path)
+
         trans = model_dict['trans'].astype(np.float32)
         minimal_shape = model_dict['minimal_shape']
         # Break symmetry if given in float16:
@@ -266,20 +270,6 @@ class ZJUMOCAPODPDataset(data.Dataset):
         pose_feature = (pose_mat - ident).reshape([207, 1])
         pose_offsets = np.dot(posedir.reshape([-1, 207]), pose_feature).reshape([6890, 3])
         minimal_shape += pose_offsets
-
-        # Update camera parameters
-        img_crop, T_no_scale, side = crop_new(np.zeros((1024, 1024, 3), dtype=np.float32), center_img, scale_img, self.img_size, rot, flip) # img_crop is just a placeholder
-        mask_crop = np.zeros([512, 512], dtype=bool)
-        focal_length = focal_length / side  * max(self.img_size)
-        center_cam = np.concatenate([center_cam, np.ones(1, dtype=np.float32)], axis=-1).reshape([3, 1])
-        center_cam = np.dot(T_no_scale, center_cam)[:2, 0] \
-                / side * max(self.img_size)
-
-        K[:2, -1] = center_cam
-        K[0, 0] = focal_length[0]
-        K[1, 1] = focal_length[1]
-
-        K_inv = np.linalg.inv(K)
 
         # Get posed minimally-clothed shape
         skinning_weights = self.skinning_weights[gender]
@@ -369,7 +359,7 @@ class ZJUMOCAPODPDataset(data.Dataset):
             'Jtrs': Jtr_norm.astype(np.float32),
             'rots_full': pose_rot_full.astype(np.float32),
             'Jtrs_posed': Jtr_posed.astype(np.float32),
-            'center_cam': center_cam,
+            'center_cam': principal_point,
             'focal_length': focal_length,
             'K': K,
             'R': R,

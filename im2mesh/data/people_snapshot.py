@@ -1,10 +1,8 @@
 import os
-import math
 import glob
 import cv2
 import numpy as np
 import pickle as pkl
-import json
 # import logging
 import trimesh
 import numbers
@@ -16,7 +14,7 @@ from scipy.spatial.transform import Rotation
 
 from im2mesh.utils.libmesh import check_mesh_contains
 from im2mesh.utils.utils import get_bound_2d_mask, get_near_far, get_02v_bone_transforms
-from .imutils import crop_new
+
 
 class PeopleSnapshotDataset(data.Dataset):
     ''' ZJU MoCap dataset class.
@@ -247,28 +245,17 @@ class PeopleSnapshotDataset(data.Dataset):
         data_path = self.data[idx]['model_file']
         img_path = self.data[idx]['img_file']
         mask_path = self.data[idx]['mask_file']
-        cam_name = self.data[idx]['cam_name']
         cam_idx = self.data[idx]['cam_idx']
         frame_idx = self.data[idx]['frame_idx']
         data_idx = self.data[idx]['data_idx']
         gender = self.data[idx]['gender']
         data = {}
 
-        # No image augmentation is used; just feed default parameters to the image cropping function
-        flip = False            # flipping
-        pn = np.ones(3)  # per channel pixel-noise
-        rot = 0            # rotation
-        sc = 1            # scaling
-
         # Load and undistort image and mask
         image = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
         mask_erode = self.get_mask(mask)
 
-        # K = np.array(self.cameras[cam_name]['K'], dtype=np.float32)
-        # dist = np.array(self.cameras[cam_name]['D'], dtype=np.float32).ravel()
-        # R = np.array(self.cameras[cam_name]['R'], np.float32)
-        # cam_trans = np.array(self.cameras[cam_name]['T'], np.float32).ravel()
         K = self.K.copy()
         dist = self.D.copy()
         R = self.R.copy()
@@ -280,34 +267,33 @@ class PeopleSnapshotDataset(data.Dataset):
         mask = cv2.undistort(mask, K, dist, None)
         mask_erode = cv2.undistort(mask_erode, K, dist, None)
 
-        model_dict = np.load(data_path)
+        orig_img_size = (image.shape[0], image.shape[1])
 
-        # center_img = model_dict['center_img']
-        # scale_img = model_dict['scale_img']
-
-        # For People SnapShot the image size is always 1080 x 1080
-        center_img = np.array(self.orig_img_size, dtype=np.float32) / 2.0
-        scale_img = self.orig_img_size[0] / 200
-        scale_img *= sc
-
-        center_cam = K[:2, -1].reshape(-1).astype(np.float32)
-        focal_length = np.array([K[0, 0], K[1, 1]], dtype=np.float32)
-
-        # Crop and augment image
-        img_crop, T_no_scale, side = crop_new(image, center_img, scale_img, self.img_size, rot, flip)
-        mask_crop, _, _ = crop_new(mask, center_img, scale_img, self.img_size, rot, flip, cv2.INTER_NEAREST)
-        mask_erode_crop, _, _ = crop_new(mask_erode, center_img, scale_img, self.img_size, rot, flip, cv2.INTER_NEAREST)
-        T_no_scale = T_no_scale.astype(np.float32)
-        img_crop_ = img_crop.copy()
+        # Resize image
+        img_crop = cv2.resize(image, (self.img_size[1],  self.img_size[0]), interpolation=cv2.INTER_LINEAR)
+        mask_crop = cv2.resize(mask, (self.img_size[1],  self.img_size[0]), interpolation=cv2.INTER_NEAREST)
+        mask_erode_crop = cv2.resize(mask_erode, (self.img_size[1],  self.img_size[0]), interpolation=cv2.INTER_NEAREST)
         img_crop = img_crop.astype(np.float32)
-
-        img_crop[:,:,0] = np.minimum(255.0, np.maximum(0.0, img_crop[:,:,0]*pn[0]))
-        img_crop[:,:,1] = np.minimum(255.0, np.maximum(0.0, img_crop[:,:,1]*pn[1]))
-        img_crop[:,:,2] = np.minimum(255.0, np.maximum(0.0, img_crop[:,:,2]*pn[2]))
 
         img_crop /= 255.0
 
+        side = max(orig_img_size)
+
+        # Update camera parameters
+        principal_point = K[:2, -1].reshape(-1).astype(np.float32)
+        focal_length = np.array([K[0, 0], K[1, 1]], dtype=np.float32)
+
+        focal_length = focal_length / side  * max(self.img_size)
+        principal_point = principal_point / side * max(self.img_size)
+
+        K[:2, -1] = principal_point
+        K[0, 0] = focal_length[0]
+        K[1, 1] = focal_length[1]
+
+        K_inv = np.linalg.inv(K)    # for mapping rays from camera space to world space
+
         # 3D models and points
+        model_dict = np.load(data_path)
         trans = model_dict['trans'].astype(np.float32)
         minimal_shape = model_dict['minimal_shape']
         # Break symmetry if given in float16:
@@ -342,18 +328,6 @@ class PeopleSnapshotDataset(data.Dataset):
         pose_feature = (pose_mat - ident).reshape([207, 1])
         pose_offsets = np.dot(posedir.reshape([-1, 207]), pose_feature).reshape([6890, 3])
         minimal_shape += pose_offsets
-
-        # Update camera parameters
-        focal_length = focal_length / side  * max(self.img_size)
-        center_cam = np.concatenate([center_cam, np.ones(1, dtype=np.float32)], axis=-1).reshape([3, 1])
-        center_cam = np.dot(T_no_scale, center_cam)[:2, 0] \
-                / side * max(self.img_size)
-
-        K[:2, -1] = center_cam
-        K[0, 0] = focal_length[0]
-        K[1, 1] = focal_length[1]
-
-        K_inv = np.linalg.inv(K)
 
         # Get posed minimally-clothed shape
         skinning_weights = self.skinning_weights[gender]
@@ -602,7 +576,7 @@ class PeopleSnapshotDataset(data.Dataset):
             'Jtrs': Jtr_norm.astype(np.float32),
             'rots_full': pose_rot_full.astype(np.float32),
             'Jtrs_posed': Jtr_posed.astype(np.float32),
-            'center_cam': center_cam,
+            'center_cam': principal_point,
             'focal_length': focal_length,
             'K': K,
             'R': R,

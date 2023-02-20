@@ -1,5 +1,4 @@
 import os
-import math
 import glob
 import cv2
 import numpy as np
@@ -15,7 +14,7 @@ from scipy.spatial.transform import Rotation
 
 from im2mesh.utils.libmesh import check_mesh_contains
 from im2mesh.utils.utils import get_bound_2d_mask, get_near_far, get_02v_bone_transforms
-from .imutils import crop_new
+
 
 class H36MDataset(data.Dataset):
     ''' H36M dataset class.
@@ -239,12 +238,6 @@ class H36MDataset(data.Dataset):
         gender = self.data[idx]['gender']
         data = {}
 
-        # No image augmentation is used; just feed default parameters to the image cropping function
-        flip = False            # flipping
-        pn = np.ones(3)  # per channel pixel-noise
-        rot = 0            # rotation
-        sc = 1            # scaling
-
         # Load and undistort image and mask
         image = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
@@ -269,7 +262,9 @@ class H36MDataset(data.Dataset):
 
         model_dict = np.load(data_path)
 
-        center_cam = K[:2, -1].reshape(-1).astype(np.float32)
+        # Camera intrinsics were computed for resolution (1002, 1000) already,
+        # so no need to update
+        principal_point = K[:2, -1].reshape(-1).astype(np.float32)
         focal_length = np.array([K[0, 0], K[1, 1]], dtype=np.float32)
 
         # Crop and augment image
@@ -277,10 +272,6 @@ class H36MDataset(data.Dataset):
         mask_crop = mask.copy()
         mask_erode_crop = mask_erode.copy()
         img_crop = img_crop.astype(np.float32)
-
-        img_crop[:,:,0] = np.minimum(255.0, np.maximum(0.0, img_crop[:,:,0]*pn[0]))
-        img_crop[:,:,1] = np.minimum(255.0, np.maximum(0.0, img_crop[:,:,1]*pn[1]))
-        img_crop[:,:,2] = np.minimum(255.0, np.maximum(0.0, img_crop[:,:,2]*pn[2]))
 
         img_crop /= 255.0
 
@@ -567,7 +558,7 @@ class H36MDataset(data.Dataset):
             'Jtrs': Jtr_norm.astype(np.float32),
             'rots_full': pose_rot_full.astype(np.float32),
             'Jtrs_posed': Jtr_posed.astype(np.float32),
-            'center_cam': center_cam,
+            'center_cam': principal_point,
             'focal_length': focal_length,
             'K': K,
             'R': R,
