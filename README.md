@@ -84,6 +84,9 @@ The extracted SMPL parameters will be saved into `./body_models/misc/`.
     ```
     to render every 25th frame. Inference requires ~20GB VRAM, if you don't have so much memory, add `--low-vram` option. This should run with ~12GB VRAM at the cost of longer inference time. 
 
+## Results on ZJU-MoCap
+For easy comparison to our approach, we also store all our rendering and geometry reconstruction results on the ZJU-MoCap dataset [here](https://drive.google.com/file/d/14Icwr85NmQozfQOdZAMX5T8QF7tb8vsc/view?usp=share_link). Train/val splits on cameras/poses follow [NeuralBody's split](https://github.com/zju3dv/neuralbody/blob/master/supplementary_material.md#training-and-test-data). Pseudo ground truths for geometry reconstruction on the ZJU-MoCap dataset are stored in [this folder](https://drive.google.com/drive/folders/1-OE3h7nxg7ixL3yh0Y7bGYKVsNWS-Zm4?usp=share_link). For evaluation script and data split of geometry reconstruction please refer to [this comment](https://github.com/taconite/arah-release/issues/9#issuecomment-1359209138).
+
 ## Dataset preparation
 Due to license issues, we cannot publicly distribute our preprocessed ZJU-MoCap and H36M data. You have to get the raw data from their respective sources and use our preprocessing script to generate data that is suitable for our training/validation scripts. Please follow the steps in [DATASET.md](DATASET.md).
 
