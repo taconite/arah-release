@@ -40,12 +40,12 @@ def load_model(gender='neutral', use_cuda=True, model_type='smpl', skel_type='bo
             device = torch.device('cpu')
     from .body_model import SMPLlayer
     if model_type == 'smpl':
-        if skel_type == 'body25':
-            reg_path = join(model_path, 'misc', 'J_regressor_body25.npy')
-        else:
-            raise NotImplementedError
+        # if skel_type == 'body25':
+        #     reg_path = join(model_path, 'misc', 'J_regressor_body25.npy')
+        # else:
+        #     raise NotImplementedError
         body_model = SMPLlayer(join(model_path, 'smpl', gender, 'model.pkl'), gender=gender, device=device,
-            regressor_path=reg_path)
+            regressor_path=None)
     else:
         body_model = None
     body_model.to(device)
